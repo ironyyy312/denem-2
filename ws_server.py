@@ -6,14 +6,14 @@ import datetime
 import sys
 from aiohttp import web
 
-# Docker/Linux ortamında /app yolunu kullanıyoruz (Dockerfile’da bu dizine kopyalıyorsunuz)
+# Docker/Linux ortamında /app yolunu kullanıyoruz (Dockerfile’da bu dizine kopyalanıyor)
 base_path = "/app"
 
-# bagislar.json ve log dosyalarının tam yolları
+# bagislar.json ve log dosyasının tam yolları
 json_dosya = os.path.join(base_path, "bagislar.json")
 log_dosya = os.path.join(base_path, "bagis_log.txt")
 
-# Eğer bagislar.json varsa, geçmiş verileri yükleyelim
+# Eğer bagislar.json dosyası varsa, geçmiş verileri yükleyelim.
 bagislar = []
 if os.path.exists(json_dosya):
     try:
@@ -24,17 +24,14 @@ if os.path.exists(json_dosya):
         sys.stdout.flush()
 
 donation_hash_set = set()
-active_channels = {}           # Örnek: {"Kanal 1": "Bağlandı, süre: mm:ss", "Kanal 2": "Bağlandı, süre: mm:ss"}
-connection_start_times = {}    # Her kanal için bağlantı başlangıç zamanı
+active_channels = {}           # Örneğin: {"Kanal 1": "Bağlandı, süre: mm:ss", "Kanal 2": "Bağlandı, süre: mm:ss"}
+connection_start_times = {}    # Her kanal için bağlantı başlangıç zamanını saklar
 clients = set()                # Bağlı istemcileri tutan set
 
-# (Opsiyonel) Internet durumu için; burada kullanılmıyor ama isterseniz ekleyebilirsiniz
-internet_status = "Internet: Çevrimiçi"
-
-# ANSI renk kodları
-GREEN = "\033[92m"   # Yeşil
-RED   = "\033[91m"   # Kırmızı
-RESET = "\033[0m"    # Renk sıfırlama
+# Renk kodları (opsiyonel)
+GREEN = "\033[92m"
+RED   = "\033[91m"
+RESET = "\033[0m"
 
 def print_active_channels():
     output = ""
@@ -44,16 +41,17 @@ def print_active_channels():
     sys.stdout.write("\r" + output.rstrip(" | "))
     sys.stdout.flush()
 
-async def status_updater():
-    while True:
-        now = datetime.datetime.now()
-        for channel in connection_start_times:
-            elapsed = now - connection_start_times[channel]
-            minutes = elapsed.seconds // 60
-            seconds = elapsed.seconds % 60
-            active_channels[channel] = f"Bağlandı, süre: {minutes}:{str(seconds).zfill(2)}"
-        print_active_channels()
-        await asyncio.sleep(1)
+# -- Status updater fonksiyonunu kaldırıyoruz veya daha az sıklıkta çalıştırabilirsiniz --
+# async def status_updater():
+#     while True:
+#         now = datetime.datetime.now()
+#         for channel in connection_start_times:
+#             elapsed = now - connection_start_times[channel]
+#             minutes = elapsed.seconds // 60
+#             seconds = elapsed.seconds % 60
+#             active_channels[channel] = f"Bağlandı, süre: {minutes}:{str(seconds).zfill(2)}"
+#         print_active_channels()
+#         await asyncio.sleep(1)
 
 def bagis_ekle(mesaj):
     print(f"Yeni Bağış Geldi: {mesaj}")
@@ -100,6 +98,7 @@ async def websocket_handler(request):
     print("✅ Yeni bağlantı kuruldu.")
     sys.stdout.flush()
     current_channel = None
+
     async for msg in ws:
         if msg.type == web.WSMsgType.TEXT:
             if msg.data.startswith("connection active") or msg.data.startswith("ping"):
@@ -140,39 +139,39 @@ async def reset_handler(request):
     except Exception as e:
         print("JSON dosyası silinirken hata:", e)
         sys.stdout.flush()
+
     for client in list(clients):
         try:
             await client.send_str("reset")
         except Exception as e:
             print("Reset mesajı gönderilemedi:", e)
             sys.stdout.flush()
+
     return web.Response(
         text="Donations reset.",
         headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
     )
 
-# PUBLIC_URL'i döndüren config endpoint'i
-async def config_handler(request):
-    public_url = os.environ.get("PUBLIC_URL", "localhost")
-    return web.json_response({"public_url": public_url})
-
 async def start_http_server():
     app = web.Application()
     app.add_routes([
         web.get("/ws", websocket_handler),
-        web.get("/reset", reset_handler),
-        web.get("/config", config_handler)
+        web.get("/reset", reset_handler)
     ])
     port = int(os.environ.get("PORT", 5679))
     print(f"🚀 Sunucu başlatılıyor (port {port})...")
     sys.stdout.flush()
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"HTTP server started at http://localhost:{port} (accessible locally)")
     sys.stdout.flush()
-    asyncio.create_task(status_updater())
+
+    # İsteğe bağlı: Status updater'ı kaldırdık, bu yüzden aşağıdaki satırı yorum satırına alıyoruz.
+    # asyncio.create_task(status_updater())
+    
     while True:
         await asyncio.sleep(3600)
 
